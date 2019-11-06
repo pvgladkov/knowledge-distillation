@@ -6,12 +6,12 @@ import os
 
 import torch
 from torch.utils.data import TensorDataset, random_split, RandomSampler, DataLoader, SequentialSampler
+from torchtext import data
 from tqdm import tqdm
 
 from knowledge_distillation.loss import WeightedMSE
-from knowledge_distillation.utils import device, to_indexes, pad
 from knowledge_distillation.modeling_lstm import SimpleLSTM
-from torchtext import data
+from knowledge_distillation.utils import device, to_indexes, pad
 
 
 class _LSTMBase(object):
@@ -23,11 +23,16 @@ class _LSTMBase(object):
         self.settings = settings
         self.logger = logger
 
-    def model(self, TEXT):
+    def model(self, text_field):
         raise NotImplementedError()
 
-    def to_dataset(self, x, x_lengths, y, y_real):
-        raise NotImplementedError()
+    @staticmethod
+    def to_dataset(x, x_lengths, y, y_real):
+        torch_x = torch.tensor(x, dtype=torch.long)
+        torch_lengths = torch.tensor(x_lengths, dtype=torch.long)
+        torch_y = torch.tensor(y, dtype=torch.float)
+        torch_real_y = torch.tensor(y_real, dtype=torch.long)
+        return TensorDataset(torch_x, torch_lengths, torch_y, torch_real_y)
 
     @staticmethod
     def to_device(text, text_len, bert_prob, real_label):
@@ -42,9 +47,9 @@ class _LSTMBase(object):
 
         X_split = [t.split() for t in X]
 
-        TEXT = data.Field()
+        text_field = data.Field()
 
-        TEXT.build_vocab(X_split, max_size=10000)
+        text_field.build_vocab(X_split, max_size=10000)
 
         # len
         X_lengths = [len(s) for s in tqdm(X_split, desc='lengths')]
@@ -53,20 +58,21 @@ class _LSTMBase(object):
         X_pad = [pad(s, max_len) for s in tqdm(X_split, desc='pad')]
 
         # to index
-        X_index = [to_indexes(TEXT.vocab, s) for s in tqdm(X_pad, desc='to index')]
+        X_index = [to_indexes(text_field.vocab, s) for s in tqdm(X_pad, desc='to index')]
 
         dataset = self.to_dataset(X_index, X_lengths, y, y_real)
         val_len = int(len(dataset) * 0.1)
         train_dataset, val_dataset = random_split(dataset, (len(dataset) - val_len, val_len))
 
-        model = self.model(TEXT)
+        model = self.model(text_field)
         model.to(device())
 
         self.full_train(model, train_dataset, val_dataset, output_dir)
 
-        torch.save(TEXT, os.path.join(output_dir, self.vocab_name))
+        torch.save(text_field, os.path.join(output_dir, self.vocab_name))
 
-    def optimizer(self, model):
+    @staticmethod
+    def optimizer(model):
         optimizer = torch.optim.Adam(model.parameters())
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 2, gamma=0.9)
         return optimizer, scheduler
@@ -97,9 +103,48 @@ class _LSTMBase(object):
                 torch.save(model.state_dict(), os.path.join(output_dir, self.weights_name))
 
     def epoch_train_func(self, model, dataset):
-        raise NotImplementedError()
+        train_loss = 0
+        train_sampler = RandomSampler(dataset)
+        data_loader = DataLoader(dataset, sampler=train_sampler, batch_size=self.settings['train_batch_size'],
+                                 drop_last=True)
+        model.train()
+        optimizer, scheduler = self.optimizer(model)
+        for i, (text, text_len, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Train')):
+            text, text_len, bert_prob, real_label = self.to_device(text, text_len, bert_prob, real_label)
+            model.zero_grad()
+            output = model(text.t(), text_len).squeeze(1)
+            loss = self.loss(output, bert_prob, real_label)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+        scheduler.step()
+        return train_loss / len(data_loader)
 
     def epoch_evaluate_func(self, model, eval_dataset):
+        """
+        :param model:
+        :param eval_dataset:s
+        :return:
+        """
+        eval_sampler = SequentialSampler(eval_dataset)
+        data_loader = DataLoader(eval_dataset, sampler=eval_sampler,
+                                 batch_size=self.settings['eval_batch_size'],
+                                 drop_last=True)
+
+        self.logger.info("***** Running evaluation *****")
+        self.logger.info("  Num examples = %d", len(eval_dataset))
+        self.logger.info("  Batch size = %d", self.settings['eval_batch_size'])
+        eval_loss = 0.0
+        model.eval()
+        for i, (text, text_len, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Val')):
+            text, text_len, bert_prob, real_label = self.to_device(text, text_len, bert_prob, real_label)
+            output = model(text.t(), text_len).squeeze(1)
+            loss = self.loss(output, bert_prob, real_label)
+            eval_loss += loss.item()
+
+        return eval_loss / len(data_loader)
+
+    def loss(self, output, bert_prob, real_label):
         raise NotImplementedError()
 
 
@@ -115,70 +160,20 @@ class LSTMBaseline(_LSTMBase):
         super(LSTMBaseline, self).__init__(settings, logger)
         self.criterion = torch.nn.BCEWithLogitsLoss().to(device())
 
-    def model(self, TEXT):
-        model = SimpleLSTM(len(TEXT.vocab), 64, 128, 1, 1, True, 0.5,
-                           batch_size=self.settings['train_batch_size'])
+    def loss(self, output, bert_prob, real_label):
+        return self.criterion(output, real_label.float())
+
+    def model(self, text_field):
+        model = SimpleLSTM(
+            input_dim=len(text_field.vocab),
+            embedding_dim=64,
+            hidden_dim=128,
+            output_dim=1,
+            n_layers=1,
+            bidirectional=True,
+            dropout=0.5,
+            batch_size=self.settings['train_batch_size'])
         return model
-
-    def to_dataset(self, x, x_lengths, y, y_real):
-        torch_x = torch.tensor(x, dtype=torch.long)
-        torch_lengths = torch.tensor(x_lengths, dtype=torch.long)
-        torch_y = torch.tensor(y, dtype=torch.float)
-        torch_real_y = torch.tensor(y_real, dtype=torch.float)
-        return TensorDataset(torch_x, torch_lengths, torch_y, torch_real_y)
-
-    def epoch_train_func(self, model, dataset):
-        """
-        Одна эпоха
-        """
-        train_loss = 0
-        batch_size = self.settings['train_batch_size']
-        train_sampler = RandomSampler(dataset)
-        data_loader = DataLoader(dataset, sampler=train_sampler, batch_size=batch_size, drop_last=True)
-
-        model.train()
-
-        optimizer, scheduler = self.optimizer(model)
-
-        for i, (text, text_len, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Train')):
-
-            text, text_len, bert_prob, real_label = self.to_device(text, text_len, bert_prob, real_label)
-
-            model.zero_grad()
-            output = model(text.t(), text_len).squeeze(1)
-
-            loss = self.criterion(output, real_label)
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.item()
-
-        scheduler.step()
-        return train_loss / len(data_loader)
-
-    def epoch_evaluate_func(self, model, eval_dataset):
-        """
-        :param model:
-        :param eval_dataset:s
-        :return:
-        """
-        batch_size = self.settings['eval_batch_size']
-        eval_sampler = SequentialSampler(eval_dataset)
-        data_loader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=batch_size, drop_last=True)
-
-        self.logger.info("***** Running evaluation *****")
-        self.logger.info("  Num examples = %d", len(eval_dataset))
-        self.logger.info("  Batch size = %d", batch_size)
-        eval_loss = 0.0
-        model.eval()
-        for i, (text, text_len, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Val')):
-
-            text, text_len, bert_prob, real_label = self.to_device(text, text_len, bert_prob, real_label)
-
-            output = model(text.t(), text_len).squeeze(1)
-            loss = self.criterion(output, real_label)
-            eval_loss += loss.item()
-
-        return eval_loss / len(data_loader)
 
 
 class LSTMDistilled(_LSTMBase):
@@ -198,62 +193,17 @@ class LSTMDistilled(_LSTMBase):
     def loss(self, output, bert_prob, real_label):
         return self.a * self.criterion_ce(output, real_label) + (1 - self.a) * self.criterion_mse(output, bert_prob)
 
-    def model(self, TEXT):
-        model = SimpleLSTM(len(TEXT.vocab), 64, 128, 2, 1, True, 0.5,
-                           batch_size=self.settings['train_batch_size'])
+    def model(self, text_field):
+        model = SimpleLSTM(
+            input_dim=len(text_field.vocab),
+            embedding_dim=64,
+            hidden_dim=128,
+            output_dim=2,
+            n_layers=1,
+            bidirectional=True,
+            dropout=0.5,
+            batch_size=self.settings['train_batch_size'])
         return model
-
-    def to_dataset(self, x, x_lengths, y, y_real):
-        torch_x = torch.tensor(x, dtype=torch.long)
-        torch_lengths = torch.tensor(x_lengths, dtype=torch.long)
-        torch_y = torch.tensor(y, dtype=torch.float)
-        torch_real_y = torch.tensor(y_real, dtype=torch.long)
-        return TensorDataset(torch_x, torch_lengths, torch_y, torch_real_y)
-
-    def epoch_train_func(self, model, dataset):
-        train_loss = 0
-        batch_size = self.settings['train_batch_size']
-        train_sampler = RandomSampler(dataset)
-        data_loader = DataLoader(dataset, sampler=train_sampler, batch_size=batch_size, drop_last=True)
-
-        model.train()
-
-        optimizer, scheduler = self.optimizer(model)
-
-        for i, (text, text_len, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Train')):
-
-            model.zero_grad()
-            text, text_len, bert_prob, real_label = self.to_device(text, text_len, bert_prob, real_label)
-
-            output = model(text.t(), text_len).squeeze(1)
-
-            loss = self.loss(output, bert_prob, real_label)
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.item()
-
-        scheduler.step()
-        return train_loss / len(data_loader)
-
-    def epoch_evaluate_func(self, model, eval_dataset):
-        batch_size = self.settings['eval_batch_size']
-        eval_sampler = SequentialSampler(eval_dataset)
-        data_loader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=batch_size, drop_last=True)
-
-        self.logger.info("***** Running evaluation *****")
-        self.logger.info("  Num examples = %d", len(eval_dataset))
-        self.logger.info("  Batch size = %d", batch_size)
-        eval_loss = 0.0
-
-        model.eval()
-        for i, (text, text_len, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Val')):
-            text, text_len, bert_prob, real_label = self.to_device(text, text_len, bert_prob, real_label)
-
-            output = model(text.t(), text_len).squeeze(1)
-            loss = self.loss(output, bert_prob, real_label)
-            eval_loss += loss.item()
-
-        return eval_loss / len(data_loader)
 
 
 class LSTMDistilledWeighted(LSTMDistilled):
