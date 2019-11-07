@@ -1,4 +1,7 @@
-FROM nvidia/cuda:9.0-base-ubuntu16.04
+FROM nvidia/cuda:9.2-base-ubuntu18.04
+
+ENV TZ=Europe/Moscow
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -46,5 +49,8 @@ COPY ./requirements.txt $PROJECT_ROOT/
 RUN pip3 install --upgrade pip
 
 RUN pip3 install --no-cache-dir -r requirements.txt
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
 CMD ["/bin/bash"]
