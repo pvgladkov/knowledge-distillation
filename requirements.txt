@@ -4,3 +4,4 @@ tqdm
 pandas
 nltk
 ipython
+inflect
