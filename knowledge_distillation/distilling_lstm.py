@@ -12,6 +12,7 @@ from tqdm import tqdm
 from knowledge_distillation.loss import WeightedMSE
 from knowledge_distillation.modeling_lstm import SimpleLSTM
 from knowledge_distillation.utils import device, to_indexes, pad
+from experiments.sst2.utils import normalize
 
 
 class _LSTMBase(object):
@@ -27,40 +28,34 @@ class _LSTMBase(object):
         raise NotImplementedError()
 
     @staticmethod
-    def to_dataset(x, x_lengths, y, y_real):
+    def to_dataset(x, y, y_real):
         torch_x = torch.tensor(x, dtype=torch.long)
-        torch_lengths = torch.tensor(x_lengths, dtype=torch.long)
         torch_y = torch.tensor(y, dtype=torch.float)
         torch_real_y = torch.tensor(y_real, dtype=torch.long)
-        return TensorDataset(torch_x, torch_lengths, torch_y, torch_real_y)
+        return TensorDataset(torch_x, torch_y, torch_real_y)
 
     @staticmethod
-    def to_device(text, text_len, bert_prob, real_label):
-        text, text_len = text.to(device()), text_len.to(device())
+    def to_device(text, bert_prob, real_label):
+        text = text.to(device())
         bert_prob = bert_prob.to(device())
         real_label = real_label.to(device())
-        return text, text_len, bert_prob, real_label
+        return text, bert_prob, real_label
 
     def train(self, X, y, y_real, output_dir):
 
-        max_len = self.settings['max_seq_length']
-
-        X_split = [t.split() for t in X]
+        X_split = [normalize(t.split()) for t in X]
 
         text_field = data.Field()
 
         text_field.build_vocab(X_split, max_size=10000)
 
-        # len
-        X_lengths = [len(s) for s in tqdm(X_split, desc='lengths')]
-
         # pad
-        X_pad = [pad(s, max_len) for s in tqdm(X_split, desc='pad')]
+        X_pad = [pad(s, self.settings['max_seq_length']) for s in tqdm(X_split, desc='pad')]
 
         # to index
         X_index = [to_indexes(text_field.vocab, s) for s in tqdm(X_pad, desc='to index')]
 
-        dataset = self.to_dataset(X_index, X_lengths, y, y_real)
+        dataset = self.to_dataset(X_index, y, y_real)
         val_len = int(len(dataset) * 0.1)
         train_dataset, val_dataset = random_split(dataset, (len(dataset) - val_len, val_len))
 
@@ -68,8 +63,23 @@ class _LSTMBase(object):
         model.to(device())
 
         self.full_train(model, train_dataset, val_dataset, output_dir)
-
         torch.save(text_field, os.path.join(output_dir, self.vocab_name))
+
+        return model, text_field.vocab
+
+    def validate(self, X, y, model, vocab):
+
+        X_split = [normalize(t.split()) for t in X]
+
+        # pad
+        X_pad = [pad(s, self.settings['max_seq_length']) for s in tqdm(X_split, desc='pad')]
+
+        # to index
+        X_index = [to_indexes(vocab, s) for s in tqdm(X_pad, desc='to index')]
+
+        dataset = self.to_dataset(X_index, y, y)
+        _, acc = self.epoch_evaluate_func(model, dataset)
+        self.logger.info('accuracy={}'.format(acc))
 
     @staticmethod
     def optimizer(model):
@@ -92,14 +102,16 @@ class _LSTMBase(object):
 
         for epoch in range(num_train_epochs):
             train_loss = self.epoch_train_func(model, train_dataset)
-            eval_loss = self.epoch_evaluate_func(model, val_dataset)
+            eval_loss, acc = self.epoch_evaluate_func(model, val_dataset)
 
-            self.logger.info("epoch={}, train_loss={}".format(epoch, train_loss))
-            self.logger.info("epoch={}, val_loss={}".format(epoch, eval_loss))
+            self.logger.info('######## epoch={} ########'.format(epoch))
+            self.logger.info("train_loss={:.4f}".format(train_loss))
+            self.logger.info("val_loss={:.4f}".format(eval_loss))
+            self.logger.info("val_acc={:.4f}".format(acc))
 
             if eval_loss < best_eval_loss:
                 best_eval_loss = eval_loss
-                self.logger.info('save best model {}'.format(eval_loss))
+                self.logger.info('save best model {:.4f}'.format(eval_loss))
                 torch.save(model.state_dict(), os.path.join(output_dir, self.weights_name))
 
     def epoch_train_func(self, model, dataset):
@@ -108,17 +120,19 @@ class _LSTMBase(object):
         data_loader = DataLoader(dataset, sampler=train_sampler, batch_size=self.settings['train_batch_size'],
                                  drop_last=True)
         model.train()
+        num_examples = 0
         optimizer, scheduler = self.optimizer(model)
-        for i, (text, text_len, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Train')):
-            text, text_len, bert_prob, real_label = self.to_device(text, text_len, bert_prob, real_label)
+        for i, (text, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Train')):
+            text, bert_prob, real_label = self.to_device(text, bert_prob, real_label)
             model.zero_grad()
-            output = model(text.t(), text_len).squeeze(1)
+            output = model(text.t()).squeeze(1)
             loss = self.loss(output, bert_prob, real_label)
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
+            num_examples += len(real_label)
         scheduler.step()
-        return train_loss / len(data_loader)
+        return train_loss / num_examples
 
     def epoch_evaluate_func(self, model, eval_dataset):
         """
@@ -131,18 +145,21 @@ class _LSTMBase(object):
                                  batch_size=self.settings['eval_batch_size'],
                                  drop_last=True)
 
-        self.logger.info("***** Running evaluation *****")
-        self.logger.info("  Num examples = %d", len(eval_dataset))
-        self.logger.info("  Batch size = %d", self.settings['eval_batch_size'])
         eval_loss = 0.0
+        acc = 0.0
+        num_examples = 0
         model.eval()
-        for i, (text, text_len, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Val')):
-            text, text_len, bert_prob, real_label = self.to_device(text, text_len, bert_prob, real_label)
-            output = model(text.t(), text_len).squeeze(1)
+        for i, (text, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Val')):
+            text, bert_prob, real_label = self.to_device(text, bert_prob, real_label)
+            output = model(text.t()).squeeze(1)
             loss = self.loss(output, bert_prob, real_label)
             eval_loss += loss.item()
 
-        return eval_loss / len(data_loader)
+            pred_label = torch.argmax(output, dim=1)
+            acc += torch.sum(pred_label == real_label).cpu().numpy()
+            num_examples += len(real_label)
+
+        return eval_loss / num_examples, acc / num_examples
 
     def loss(self, output, bert_prob, real_label):
         raise NotImplementedError()
@@ -158,17 +175,17 @@ class LSTMBaseline(_LSTMBase):
 
     def __init__(self, settings, logger):
         super(LSTMBaseline, self).__init__(settings, logger)
-        self.criterion = torch.nn.BCEWithLogitsLoss().to(device())
+        self.criterion = torch.nn.CrossEntropyLoss()
 
     def loss(self, output, bert_prob, real_label):
-        return self.criterion(output, real_label.float())
+        return self.criterion(output, real_label)
 
     def model(self, text_field):
         model = SimpleLSTM(
             input_dim=len(text_field.vocab),
             embedding_dim=64,
             hidden_dim=128,
-            output_dim=1,
+            output_dim=2,
             n_layers=1,
             bidirectional=True,
             dropout=0.5,

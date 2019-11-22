@@ -10,9 +10,7 @@ from torch.nn.functional import log_softmax
 class WeightedMSE(nn.Module):
 
     def forward(self, model_logits, bert_logits, labels):
-
         k = 1.5
-
         p = log_softmax(bert_logits, 1)
         ohe_labels = torch.nn.functional.one_hot(labels)
         nn_l = torch.sum(ohe_labels.float() * p, dim=1)
