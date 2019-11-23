@@ -1,7 +1,7 @@
 # Sentiment Analysis on SST-2 Binary classification
 
 
-Implementation ideas from "**Distilling Task-Specific Knowledge from BERT into Simple Neural Networks**" (2019) https://arxiv.org/abs/1903.12136 
+Implementation of ideas from "**Distilling Task-Specific Knowledge from BERT into Simple Neural Networks**" (2019) https://arxiv.org/abs/1903.12136 
 
 ## Run 
 
