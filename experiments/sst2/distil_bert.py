@@ -12,7 +12,7 @@ from transformers import BertForSequenceClassification, BertTokenizer
 from experiments.sst2.bert_trainer import batch_to_inputs
 from experiments.sst2.lstm_trainer import LSTMDistilled
 from experiments.sst2.settings import distillation_settings, TRAIN_FILE, TEST_FILE, ROOT_DATA_PATH
-from experiments.sst2.train_bert import df_to_dataset
+from knowledge_distillation.bert_data import df_to_dataset
 from knowledge_distillation.utils import get_logger, device
 
 if __name__ == '__main__':
@@ -25,7 +25,7 @@ if __name__ == '__main__':
     bert_model = BertForSequenceClassification.from_pretrained(ROOT_DATA_PATH)
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-    train_dataset = df_to_dataset(train_df, tokenizer)
+    train_dataset = df_to_dataset(train_df, tokenizer, distillation_settings['max_seq_length'])
     sampler = SequentialSampler(train_dataset)
     data = DataLoader(train_dataset, sampler=sampler, batch_size=distillation_settings['train_batch_size'])
 

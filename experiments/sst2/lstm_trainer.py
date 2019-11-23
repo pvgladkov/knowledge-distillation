@@ -12,7 +12,7 @@ from tqdm import tqdm
 from knowledge_distillation.loss import WeightedMSE
 from knowledge_distillation.modeling_lstm import SimpleLSTM
 from knowledge_distillation.utils import device, to_indexes, pad
-from experiments.sst2.utils import normalize
+from knowledge_distillation.text_utils import normalize
 
 
 class _LSTMBase(object):

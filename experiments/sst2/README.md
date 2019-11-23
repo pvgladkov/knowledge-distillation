@@ -36,5 +36,5 @@ $ PYTHONPATH=/app python3 experiments/sst2/distil_bert.py
 |---|---|---|
 |BERT|0.92|178M|
 |BiLSTM|0.75|0.84M|
-|Distilled BiLSTM|0.|0.84M|
+|Distilled BiLSTM|0.76|0.84M|
 
