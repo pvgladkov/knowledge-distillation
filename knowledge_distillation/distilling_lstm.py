@@ -56,7 +56,8 @@ class _LSTMBase(object):
         X_index = [to_indexes(text_field.vocab, s) for s in tqdm(X_pad, desc='to index')]
 
         dataset = self.to_dataset(X_index, y, y_real)
-        val_len = int(len(dataset) * 0.1)
+        # val_len = int(len(dataset) * 0.1)
+        val_len = 0
         train_dataset, val_dataset = random_split(dataset, (len(dataset) - val_len, val_len))
 
         model = self.model(text_field)
@@ -67,7 +68,7 @@ class _LSTMBase(object):
 
         return model, text_field.vocab
 
-    def validate(self, X, y, model, vocab):
+    def validate(self, X, y_bert, y_real, model, vocab):
 
         X_split = [normalize(t.split()) for t in X]
 
@@ -77,9 +78,9 @@ class _LSTMBase(object):
         # to index
         X_index = [to_indexes(vocab, s) for s in tqdm(X_pad, desc='to index')]
 
-        dataset = self.to_dataset(X_index, y, y)
-        _, acc = self.epoch_evaluate_func(model, dataset)
-        self.logger.info('accuracy={}'.format(acc))
+        dataset = self.to_dataset(X_index, y_bert, y_real)
+        _, acc = self.epoch_evaluate_func(model, dataset, calc_loss=False)
+        self.logger.info('accuracy={:.4f}'.format(acc))
 
     @staticmethod
     def optimizer(model):
@@ -102,17 +103,17 @@ class _LSTMBase(object):
 
         for epoch in range(num_train_epochs):
             train_loss = self.epoch_train_func(model, train_dataset)
-            eval_loss, acc = self.epoch_evaluate_func(model, val_dataset)
+            # eval_loss, acc = self.epoch_evaluate_func(model, val_dataset)
 
             self.logger.info('######## epoch={} ########'.format(epoch))
             self.logger.info("train_loss={:.4f}".format(train_loss))
-            self.logger.info("val_loss={:.4f}".format(eval_loss))
-            self.logger.info("val_acc={:.4f}".format(acc))
+            # self.logger.info("val_loss={:.4f}".format(eval_loss))
+            # self.logger.info("val_acc={:.4f}".format(acc))
 
-            if eval_loss < best_eval_loss:
-                best_eval_loss = eval_loss
-                self.logger.info('save best model {:.4f}'.format(eval_loss))
-                torch.save(model.state_dict(), os.path.join(output_dir, self.weights_name))
+            # if eval_loss < best_eval_loss:
+            #     best_eval_loss = eval_loss
+            #     self.logger.info('save best model {:.4f}'.format(eval_loss))
+            #     torch.save(model.state_dict(), os.path.join(output_dir, self.weights_name))
 
     def epoch_train_func(self, model, dataset):
         train_loss = 0
@@ -134,12 +135,7 @@ class _LSTMBase(object):
         scheduler.step()
         return train_loss / num_examples
 
-    def epoch_evaluate_func(self, model, eval_dataset):
-        """
-        :param model:
-        :param eval_dataset:s
-        :return:
-        """
+    def epoch_evaluate_func(self, model, eval_dataset, calc_loss=True):
         eval_sampler = SequentialSampler(eval_dataset)
         data_loader = DataLoader(eval_dataset, sampler=eval_sampler,
                                  batch_size=self.settings['eval_batch_size'],
@@ -152,8 +148,10 @@ class _LSTMBase(object):
         for i, (text, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Val')):
             text, bert_prob, real_label = self.to_device(text, bert_prob, real_label)
             output = model(text.t()).squeeze(1)
-            loss = self.loss(output, bert_prob, real_label)
-            eval_loss += loss.item()
+
+            if calc_loss:
+                loss = self.loss(output, bert_prob, real_label)
+                eval_loss += loss.item()
 
             pred_label = torch.argmax(output, dim=1)
             acc += torch.sum(pred_label == real_label).cpu().numpy()

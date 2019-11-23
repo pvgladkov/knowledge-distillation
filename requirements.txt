@@ -5,3 +5,4 @@ pandas
 nltk
 ipython
 inflect
+transformers
