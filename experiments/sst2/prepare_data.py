@@ -6,11 +6,13 @@ import pandas as pd
 from torchtext import data
 from torchtext import datasets
 
+from experiments.sst2.settings import ROOT_DATA_PATH, TEST_FILE, TRAIN_FILE
+
 if __name__ == '__main__':
     TEXT = data.Field(sequential=True, include_lengths=True,
                       lower=True, init_token='<sos>', eos_token='<eos>')
     LABEL = data.LabelField()
-    train, dev, test = datasets.SST.splits(TEXT, LABEL)
+    train, dev, test = datasets.SST.splits(TEXT, LABEL, root=ROOT_DATA_PATH)
 
     train_text = [' '.join(t.text) for t in train.examples]
     test_text = [' '.join(t.text) for t in test.examples]
@@ -27,7 +29,7 @@ if __name__ == '__main__':
     filtered_train_df['label'] = filtered_train_df['label'].apply(lambda x: int('positive' in x))
     filtered_test_df['label'] = filtered_test_df['label'].apply(lambda x: int('positive' in x))
 
-    filtered_train_df.to_csv('./.data/sst/train.csv', encoding='utf-8', index=False)
-    filtered_test_df.to_csv('./.data/sst/test.csv', encoding='utf-8', index=False)
+    filtered_train_df.to_csv(TRAIN_FILE, encoding='utf-8', index=False)
+    filtered_test_df.to_csv(TEST_FILE, encoding='utf-8', index=False)
 
     print('ok')

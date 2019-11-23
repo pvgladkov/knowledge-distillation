@@ -6,11 +6,9 @@ import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, random_split)
 from tqdm import tqdm
 from transformers import AdamW
-from transformers import BertForSequenceClassification, BertTokenizer
+from transformers import BertForSequenceClassification
 
-
-def device():
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from knowledge_distillation.utils import device
 
 
 def batch_to_inputs(batch):

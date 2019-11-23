@@ -2,25 +2,18 @@
 
 from __future__ import unicode_literals, print_function
 
-import pandas as pd
-from knowledge_distillation.utils import get_logger
-from transformers import BertForSequenceClassification, BertTokenizer
-import torch
-from torch.utils.data import TensorDataset
 from contextlib import closing
 from multiprocessing import Pool
+
+import pandas as pd
+import torch
+from torch.utils.data import TensorDataset
 from tqdm import tqdm
+from transformers import BertTokenizer
+
 from experiments.sst2.bert_trainer import BertTrainer
-
-
-settings = {
-    'max_seq_length': 512,
-    'num_train_epochs': 3,
-    'train_batch_size': 16,
-    'eval_batch_size': 16,
-    'learning_rate': 1e-5,
-    'adam_epsilon': 1e-8,
-}
+from experiments.sst2.settings import bert_settings, ROOT_DATA_PATH, TEST_FILE, TRAIN_FILE
+from knowledge_distillation.utils import get_logger
 
 
 def features_to_dataset(features):
@@ -124,7 +117,7 @@ def df_to_dataset(df, tokenizer):
         examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
 
     label_map = {label: i for i, label in enumerate([0, 1])}
-    examples = [(example, label_map, tokenizer, settings['max_seq_length']) for example in examples]
+    examples = [(example, label_map, tokenizer, bert_settings['max_seq_length']) for example in examples]
 
     with closing(Pool(10)) as p:
         features = list(tqdm(p.imap(example_to_feature, examples, chunksize=100), total=len(examples)))
@@ -137,16 +130,16 @@ if __name__ == '__main__':
 
     logger = get_logger()
 
-    train_df = pd.read_csv('./.data/sst/train.csv', encoding='utf-8')
-    test_df = pd.read_csv('./.data/sst/test.csv', encoding='utf-8')
+    train_df = pd.read_csv(TRAIN_FILE, encoding='utf-8')
+    test_df = pd.read_csv(TEST_FILE, encoding='utf-8')
 
     bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
     train_dataset = df_to_dataset(train_df, bert_tokenizer)
     test_dataset = df_to_dataset(test_df, bert_tokenizer)
 
-    trainer = BertTrainer(settings, logger)
-    model = trainer.train(train_dataset, bert_tokenizer, '/app/.data/sst')
+    trainer = BertTrainer(bert_settings, logger)
+    model = trainer.train(train_dataset, bert_tokenizer, ROOT_DATA_PATH)
 
     logger.info('validate on test dataset')
     _, acc = trainer.evaluate(model, test_dataset)
