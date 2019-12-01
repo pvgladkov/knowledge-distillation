@@ -13,7 +13,7 @@ $ docker build -t kd -f Dockerfile .
 ### run
 
 ```bash
-$ docker run -v local_data_path:/data -v project_path:/app -it kd
+$ docker run -v local_data_path:/data -v project_path:/app -p 0.0.0.0:8084:8084 -it kd
 ```
 
 ## Experiments

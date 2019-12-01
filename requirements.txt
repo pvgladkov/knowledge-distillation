@@ -6,3 +6,5 @@ nltk
 ipython
 inflect
 transformers
+sklearn
+tensorboard

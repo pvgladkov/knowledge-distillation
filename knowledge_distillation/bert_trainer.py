@@ -56,8 +56,8 @@ class BertTrainer(object):
 
             train_loss = self.epoch_train_func(model, train_dataset, optimizer, scheduler)
             val_loss, val_acc = self.evaluate(model, val_dataset)
-            self.logger.info("epoch={}, train_loss={:.4f}, val_loss={:.4f}, acc={:.4f}".format(epoch, train_loss,
-                                                                                               val_loss, val_acc))
+            self.logger.info('######## epoch={} ########'.format(epoch))
+            self.logger.info("train_loss={:.4f}, val_loss={:.4f}, acc={:.4f}".format(train_loss, val_loss, val_acc))
             model.save_pretrained(output_dir)
 
     def epoch_train_func(self, model, dataset, optimizer, scheduler,):

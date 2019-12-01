@@ -14,6 +14,7 @@ from knowledge_distillation.loss import WeightedMSE
 from knowledge_distillation.modeling_lstm import SimpleLSTM
 from knowledge_distillation.text_utils import normalize
 from knowledge_distillation.utils import device, to_indexes, pad
+from torch.utils.tensorboard import SummaryWriter
 
 
 class _LSTMBase(object):
@@ -24,6 +25,7 @@ class _LSTMBase(object):
     def __init__(self, settings, logger):
         self.settings = settings
         self.logger = logger
+        self.tb_writer = SummaryWriter(log_dir=settings['log_dir'], filename_suffix=settings['tb_suffix'])
 
     def model(self, text_field):
         raise NotImplementedError()
@@ -95,9 +97,11 @@ class _LSTMBase(object):
             eval_loss, acc = self.epoch_evaluate_func(model, val_dataset)
 
             self.logger.info('######## epoch={} ########'.format(epoch))
-            self.logger.info("train_loss={:.4f}".format(train_loss))
-            self.logger.info("val_loss={:.4f}".format(eval_loss))
-            self.logger.info("val_acc={:.4f}".format(acc))
+            self.logger.info("train_loss={:.4f}, val_loss={:.4f}, acc={:.4f}".format(train_loss, eval_loss, acc))
+
+            self.tb_writer.add_scalars('{}/loss'.format(self.settings['tb_suffix']),
+                                       {'train': train_loss, 'test': eval_loss}, epoch)
+            self.tb_writer.add_scalar('{}/val_acc'.format(self.settings['tb_suffix']), acc, epoch)
 
             if eval_loss < best_eval_loss:
                 best_eval_loss = eval_loss
