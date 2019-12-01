@@ -195,7 +195,7 @@ class LSTMDistilled(_LSTMBase):
         super(LSTMDistilled, self).__init__(settings, logger)
         self.criterion_mse = torch.nn.MSELoss()
         self.criterion_ce = torch.nn.CrossEntropyLoss()
-        self.a = 0.0
+        self.a = 0.5
 
     def loss(self, output, bert_prob, real_label):
         return self.a * self.criterion_ce(output, real_label) + (1 - self.a) * self.criterion_mse(output, bert_prob)
