@@ -5,9 +5,9 @@ from __future__ import unicode_literals, print_function
 import pandas as pd
 from transformers import BertTokenizer
 
-from knowledge_distillation.bert_trainer import BertTrainer
 from experiments.sst2.settings import bert_settings, ROOT_DATA_PATH, TRAIN_FILE
 from knowledge_distillation.bert_data import df_to_dataset
+from knowledge_distillation.bert_trainer import BertTrainer
 from knowledge_distillation.utils import get_logger, set_seed
 
 if __name__ == '__main__':

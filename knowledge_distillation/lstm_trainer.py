@@ -7,6 +7,7 @@ import os
 import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, RandomSampler, DataLoader, SequentialSampler
+from torch.utils.tensorboard import SummaryWriter
 from torchtext import data
 from tqdm import tqdm
 
@@ -14,7 +15,6 @@ from knowledge_distillation.loss import WeightedMSE
 from knowledge_distillation.modeling_lstm import SimpleLSTM
 from knowledge_distillation.text_utils import normalize
 from knowledge_distillation.utils import device, to_indexes, pad
-from torch.utils.tensorboard import SummaryWriter
 
 
 class _LSTMBase(object):

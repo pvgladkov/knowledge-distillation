@@ -29,7 +29,7 @@ $ PYTHONPATH=/app python3 experiments/sst2/distil_bert.py
 
 ## Results
 
-### LSTM
+### BiLSTM
 
 ![lstm results](https://github.com/pvgladkov/knowledge-distillation/blob/master/experiments/sst2/images/lstm.png)
 

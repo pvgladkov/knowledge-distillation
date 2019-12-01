@@ -2,11 +2,12 @@
 
 from __future__ import unicode_literals, print_function
 
-import torch
 import logging
-import sys
 import random
+import sys
+
 import numpy as np
+import torch
 
 
 def device():
