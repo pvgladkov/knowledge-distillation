@@ -29,9 +29,14 @@ $ PYTHONPATH=/app python3 experiments/sst2/distil_bert.py
 
 ## Results
 
-| |accuracy|# of trainable params|
-|---|---|---|
-|BERT|0.92|178M|
-|BiLSTM|0.75|0.84M|
-|Distilled BiLSTM|0.76|0.84M|
+### LSTM
+
+![lstm results](https://github.com/pvgladkov/knowledge-distillation/blob/master/experiments/sst2/images/lstm.png)
+
+
+### Distilled version
+
+![distilled_lstm results](https://github.com/pvgladkov/knowledge-distillation/blob/master/experiments/sst2/images/distil_lstm.png)
+
+
 

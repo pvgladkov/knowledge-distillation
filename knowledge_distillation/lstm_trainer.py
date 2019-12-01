@@ -52,7 +52,7 @@ class _LSTMBase(object):
         X_train, X_test, y_train, y_test, y_real_train, y_real_test = split_arrays
 
         text_field = data.Field()
-        text_field.build_vocab(X_train, max_size=10000, vectors='glove.840B.300d')
+        text_field.build_vocab(X_train, max_size=10000)
 
         # pad
         X_train_pad = [pad(s, self.settings['max_seq_length']) for s in tqdm(X_train, desc='pad')]
@@ -179,8 +179,7 @@ class LSTMBaseline(_LSTMBase):
             n_layers=1,
             bidirectional=True,
             dropout=0.5,
-            batch_size=self.settings['train_batch_size'],
-            weights=None)
+            batch_size=self.settings['train_batch_size'])
         return model
 
 
@@ -210,8 +209,7 @@ class LSTMDistilled(_LSTMBase):
             n_layers=1,
             bidirectional=True,
             dropout=0.5,
-            batch_size=self.settings['train_batch_size'],
-            weights=None)
+            batch_size=self.settings['train_batch_size'])
         return model
 
 
