@@ -9,10 +9,10 @@ from torch.utils.data import SequentialSampler, DataLoader
 from tqdm import tqdm
 from transformers import BertForSequenceClassification, BertTokenizer
 
-from experiments.sst2.bert_trainer import batch_to_inputs
-from experiments.sst2.lstm_trainer import LSTMDistilled, LSTMDistilledWeighted
-from experiments.sst2.settings import distillation_settings, TRAIN_FILE, TEST_FILE, ROOT_DATA_PATH, DEV_FILE
+from experiments.sst2.settings import distillation_settings, TRAIN_FILE, ROOT_DATA_PATH
 from knowledge_distillation.bert_data import df_to_dataset
+from knowledge_distillation.bert_trainer import batch_to_inputs
+from knowledge_distillation.lstm_trainer import LSTMDistilled
 from knowledge_distillation.utils import get_logger, device, set_seed
 
 if __name__ == '__main__':
