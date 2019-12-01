@@ -5,6 +5,8 @@ from __future__ import unicode_literals, print_function
 import torch
 import logging
 import sys
+import random
+import numpy as np
 
 
 def device():
@@ -32,3 +34,10 @@ def get_logger():
     handler.setFormatter(formatter)
     root.addHandler(handler)
     return root
+
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)

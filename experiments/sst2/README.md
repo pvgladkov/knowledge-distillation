@@ -3,13 +3,10 @@
 
 Implementation of ideas from "**Distilling Task-Specific Knowledge from BERT into Simple Neural Networks**" (2019) https://arxiv.org/abs/1903.12136 
 
+Dataset is **SST-2** from https://gluebenchmark.com/tasks.
+
 ## Run 
 
-Prepare data
-
-```bash
-$ PYTHONPATH=/app python3 experiments/sst2/prepare_data.py
-```
 
 Train baseline BiLSTM
 

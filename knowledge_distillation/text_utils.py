@@ -6,7 +6,7 @@ import re
 
 import inflect
 from nltk.corpus import stopwords
-from nltk.stem import LancasterStemmer, WordNetLemmatizer
+from nltk.stem import LancasterStemmer, WordNetLemmatizer, SnowballStemmer
 
 
 def remove_punctuation(words):
@@ -43,7 +43,7 @@ def remove_stopwords(words):
 
 def stem_words(words):
     """Stem words in list of tokenized words"""
-    stemmer = LancasterStemmer()
+    stemmer = SnowballStemmer('english')
     stems = []
     for word in words:
         stem = stemmer.stem(word)
@@ -64,7 +64,7 @@ def lemmatize_verbs(words):
 def normalize(words):
     words = remove_punctuation(words)
     words = replace_numbers(words)
-    words = remove_stopwords(words)
+    # words = remove_stopwords(words)
     words = stem_words(words)
-    words = lemmatize_verbs(words)
+    # words = lemmatize_verbs(words)
     return words

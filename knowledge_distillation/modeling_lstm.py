@@ -10,16 +10,19 @@ from torch.autograd import Variable
 class SimpleLSTM(nn.Module):
 
     def __init__(self, input_dim, embedding_dim, hidden_dim, output_dim, n_layers,
-                 bidirectional, dropout, batch_size, device=None):
+                 bidirectional, dropout, batch_size, device=None, weights=None):
         super(SimpleLSTM, self).__init__()
 
         self.batch_size = batch_size
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
 
-        self.embedding = nn.Embedding(input_dim, embedding_dim)
+        if weights is not None:
+            self.embedding = nn.Embedding.from_pretrained(weights)
+        else:
+            self.embedding = nn.Embedding(input_dim, embedding_dim)
 
-        self.rnn = nn.LSTM(embedding_dim,
+        self.rnn = nn.LSTM(self.embedding.embedding_dim,
                            hidden_dim,
                            num_layers=n_layers,
                            bidirectional=bidirectional,

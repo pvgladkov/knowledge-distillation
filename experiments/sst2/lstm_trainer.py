@@ -5,14 +5,15 @@ from __future__ import unicode_literals, print_function
 import os
 
 import torch
-from torch.utils.data import TensorDataset, random_split, RandomSampler, DataLoader, SequentialSampler
+from sklearn.model_selection import train_test_split
+from torch.utils.data import TensorDataset, RandomSampler, DataLoader, SequentialSampler
 from torchtext import data
 from tqdm import tqdm
 
 from knowledge_distillation.loss import WeightedMSE
 from knowledge_distillation.modeling_lstm import SimpleLSTM
-from knowledge_distillation.utils import device, to_indexes, pad
 from knowledge_distillation.text_utils import normalize
+from knowledge_distillation.utils import device, to_indexes, pad
 
 
 class _LSTMBase(object):
@@ -45,20 +46,22 @@ class _LSTMBase(object):
 
         X_split = [normalize(t.split()) for t in X]
 
-        text_field = data.Field()
+        split_arrays = train_test_split(X_split, y, y_real, test_size=self.settings['test_size'], stratify=y_real)
+        X_train, X_test, y_train, y_test, y_real_train, y_real_test = split_arrays
 
-        text_field.build_vocab(X_split, max_size=10000)
+        text_field = data.Field()
+        text_field.build_vocab(X_train, max_size=10000, vectors='glove.840B.300d')
 
         # pad
-        X_pad = [pad(s, self.settings['max_seq_length']) for s in tqdm(X_split, desc='pad')]
+        X_train_pad = [pad(s, self.settings['max_seq_length']) for s in tqdm(X_train, desc='pad')]
+        X_test_pad = [pad(s, self.settings['max_seq_length']) for s in tqdm(X_test, desc='pad')]
 
         # to index
-        X_index = [to_indexes(text_field.vocab, s) for s in tqdm(X_pad, desc='to index')]
+        X_train_index = [to_indexes(text_field.vocab, s) for s in tqdm(X_train_pad, desc='to index')]
+        X_test_index = [to_indexes(text_field.vocab, s) for s in tqdm(X_test_pad, desc='to index')]
 
-        dataset = self.to_dataset(X_index, y, y_real)
-        # val_len = int(len(dataset) * 0.1)
-        val_len = 0
-        train_dataset, val_dataset = random_split(dataset, (len(dataset) - val_len, val_len))
+        train_dataset = self.to_dataset(X_train_index, y_train, y_real_train)
+        val_dataset = self.to_dataset(X_test_index, y_test, y_real_test)
 
         model = self.model(text_field)
         model.to(device())
@@ -85,7 +88,7 @@ class _LSTMBase(object):
     @staticmethod
     def optimizer(model):
         optimizer = torch.optim.Adam(model.parameters())
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 2, gamma=0.9)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.9)
         return optimizer, scheduler
 
     def full_train(self, model, train_dataset, val_dataset, output_dir):
@@ -103,17 +106,17 @@ class _LSTMBase(object):
 
         for epoch in range(num_train_epochs):
             train_loss = self.epoch_train_func(model, train_dataset)
-            # eval_loss, acc = self.epoch_evaluate_func(model, val_dataset)
+            eval_loss, acc = self.epoch_evaluate_func(model, val_dataset)
 
             self.logger.info('######## epoch={} ########'.format(epoch))
             self.logger.info("train_loss={:.4f}".format(train_loss))
-            # self.logger.info("val_loss={:.4f}".format(eval_loss))
-            # self.logger.info("val_acc={:.4f}".format(acc))
+            self.logger.info("val_loss={:.4f}".format(eval_loss))
+            self.logger.info("val_acc={:.4f}".format(acc))
 
-            # if eval_loss < best_eval_loss:
-            #     best_eval_loss = eval_loss
-            #     self.logger.info('save best model {:.4f}'.format(eval_loss))
-            #     torch.save(model.state_dict(), os.path.join(output_dir, self.weights_name))
+            if eval_loss < best_eval_loss:
+                best_eval_loss = eval_loss
+                self.logger.info('save best model {:.4f}'.format(eval_loss))
+                torch.save(model.state_dict(), os.path.join(output_dir, self.weights_name))
 
     def epoch_train_func(self, model, dataset):
         train_loss = 0
@@ -182,12 +185,13 @@ class LSTMBaseline(_LSTMBase):
         model = SimpleLSTM(
             input_dim=len(text_field.vocab),
             embedding_dim=64,
-            hidden_dim=128,
+            hidden_dim=32,
             output_dim=2,
             n_layers=1,
             bidirectional=True,
             dropout=0.5,
-            batch_size=self.settings['train_batch_size'])
+            batch_size=self.settings['train_batch_size'],
+            weights=None)
         return model
 
 
@@ -203,7 +207,7 @@ class LSTMDistilled(_LSTMBase):
         super(LSTMDistilled, self).__init__(settings, logger)
         self.criterion_mse = torch.nn.MSELoss()
         self.criterion_ce = torch.nn.CrossEntropyLoss()
-        self.a = 0.5
+        self.a = 0.0
 
     def loss(self, output, bert_prob, real_label):
         return self.a * self.criterion_ce(output, real_label) + (1 - self.a) * self.criterion_mse(output, bert_prob)
@@ -212,12 +216,13 @@ class LSTMDistilled(_LSTMBase):
         model = SimpleLSTM(
             input_dim=len(text_field.vocab),
             embedding_dim=64,
-            hidden_dim=128,
+            hidden_dim=32,
             output_dim=2,
             n_layers=1,
             bidirectional=True,
             dropout=0.5,
-            batch_size=self.settings['train_batch_size'])
+            batch_size=self.settings['train_batch_size'],
+            weights=None)
         return model
 
 

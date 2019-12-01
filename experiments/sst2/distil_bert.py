@@ -10,17 +10,18 @@ from tqdm import tqdm
 from transformers import BertForSequenceClassification, BertTokenizer
 
 from experiments.sst2.bert_trainer import batch_to_inputs
-from experiments.sst2.lstm_trainer import LSTMDistilled
-from experiments.sst2.settings import distillation_settings, TRAIN_FILE, TEST_FILE, ROOT_DATA_PATH
+from experiments.sst2.lstm_trainer import LSTMDistilled, LSTMDistilledWeighted
+from experiments.sst2.settings import distillation_settings, TRAIN_FILE, TEST_FILE, ROOT_DATA_PATH, DEV_FILE
 from knowledge_distillation.bert_data import df_to_dataset
-from knowledge_distillation.utils import get_logger, device
+from knowledge_distillation.utils import get_logger, device, set_seed
 
 if __name__ == '__main__':
     logger = get_logger()
 
+    set_seed(3)
+
     # 1. get data
-    train_df = pd.read_csv(TRAIN_FILE, encoding='utf-8')
-    test_df = pd.read_csv(TEST_FILE, encoding='utf-8')
+    train_df = pd.read_csv(TRAIN_FILE, encoding='utf-8', sep='\t')
 
     bert_model = BertForSequenceClassification.from_pretrained(ROOT_DATA_PATH)
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -49,9 +50,9 @@ if __name__ == '__main__':
                 bert_logits = np.vstack((bert_logits, logits))
 
     # 2.
-    X_train = train_df['text']
+    X_train = train_df['sentence'].values
     y_train = bert_logits
-    y_real = train_df['label']
+    y_real = train_df['label'].values
 
     # 3. trainer
     distiller = LSTMDistilled(distillation_settings, logger)
@@ -59,7 +60,3 @@ if __name__ == '__main__':
     # 4. train
     model, vocab = distiller.train(X_train, y_train, y_real, ROOT_DATA_PATH)
 
-    # 5. test
-    X_test = test_df['text']
-    y_test = test_df['label']
-    distiller.validate(X_test, y_test, y_test, model, vocab)

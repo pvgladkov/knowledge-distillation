@@ -44,11 +44,7 @@ class BertTrainer(object):
 
         train_settings = self.settings
 
-        train_batch_size = train_settings['train_batch_size']
-        num_train_epochs = train_settings['num_train_epochs']
-
-        # val_len = int(len(dataset) * 0.1)
-        val_len = 0
+        val_len = int(len(dataset) * train_settings['test_size'])
         train_dataset, val_dataset = random_split(dataset, (len(dataset)-val_len, val_len))
 
         optimizer = self.optimizer(model)
@@ -56,17 +52,19 @@ class BertTrainer(object):
 
         model.zero_grad()
 
-        for epoch in range(int(num_train_epochs)):
+        for epoch in range(int(train_settings['num_train_epochs'])):
 
-            train_loss = self.epoch_train_func(model, train_dataset, train_batch_size, optimizer, scheduler)
-            self.logger.info("epoch={}, train_loss={:.4f}".format(epoch, train_loss))
+            train_loss = self.epoch_train_func(model, train_dataset, optimizer, scheduler)
+            val_loss, val_acc = self.evaluate(model, val_dataset)
+            self.logger.info("epoch={}, train_loss={:.4f}, val_loss={:.4f}, acc={:.4f}".format(epoch, train_loss,
+                                                                                               val_loss, val_acc))
             model.save_pretrained(output_dir)
 
-    def epoch_train_func(self, model, dataset, batch_size, optimizer, scheduler,):
+    def epoch_train_func(self, model, dataset, optimizer, scheduler,):
         train_loss = 0.0
 
         train_sampler = RandomSampler(dataset)
-        data = DataLoader(dataset, sampler=train_sampler, batch_size=batch_size)
+        data = DataLoader(dataset, sampler=train_sampler, batch_size=self.settings['train_batch_size'])
 
         for step, batch in enumerate(tqdm(data, desc="Iteration")):
             model.train()

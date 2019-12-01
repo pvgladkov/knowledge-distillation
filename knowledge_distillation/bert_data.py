@@ -102,7 +102,7 @@ def df_to_dataset(df, tokenizer, max_seq_length):
         'id': range(len(df)),
         'label': df['label'],
         'alpha': ['a'] * df.shape[0],
-        'text': df['text'].replace(r'\n', ' ', regex=True)
+        'text': df['sentence'].replace(r'\n', ' ', regex=True)
     })
     examples = []
     for (i, line) in enumerate(bert_df.T.to_dict().values()):
