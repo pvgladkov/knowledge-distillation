@@ -3,6 +3,8 @@
 
 Implementation of ideas from "**Distilling Task-Specific Knowledge from BERT into Simple Neural Networks**" (2019) https://arxiv.org/abs/1903.12136 
 
+The step-by-step tutorial for this approach is [here](https://towardsdatascience.com/simple-tutorial-for-distilling-bert-99883894e90a).
+
 Dataset is **SST-2** from https://gluebenchmark.com/tasks.
 
 ## Run 
