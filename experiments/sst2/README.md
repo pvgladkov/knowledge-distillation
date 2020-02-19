@@ -10,22 +10,26 @@ Dataset is **SST-2** from https://gluebenchmark.com/tasks.
 ## Run 
 
 
+
 Train baseline BiLSTM
 
 ```bash
-$ PYTHONPATH=/app python3 experiments/sst2/train_baseline.py
+$ cd /app
+$ python3 experiments/sst2/train_baseline.py
 ```
 
 Train BERT
 
 ```bash
-$ PYTHONPATH=/app python3 experiments/sst2/train_bert.py
+$ cd /app
+$ python3 experiments/sst2/train_bert.py
 ```
 
 Train distilled BiLSTM
 
 ```bash
-$ PYTHONPATH=/app python3 experiments/sst2/distil_bert.py
+$ cd /app
+$ python3 experiments/sst2/distil_bert.py
 ```
 
 

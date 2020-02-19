@@ -55,4 +55,6 @@ RUN python3 -c "import nltk; nltk.download('stopwords', quiet=True); nltk.downlo
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
+ENV PYTHONPATH "${PYTHONPATH}:${PROJECT_ROOT}"
+
 CMD ["/bin/bash"]
