@@ -7,25 +7,20 @@ import os
 import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, RandomSampler, DataLoader, SequentialSampler
-from torch.utils.tensorboard import SummaryWriter
 from torchtext import data
 from tqdm import tqdm
 
 from knowledge_distillation.loss import WeightedMSE
 from knowledge_distillation.modeling_lstm import SimpleLSTM
 from knowledge_distillation.text_utils import normalize
+from knowledge_distillation.trainer import Trainer
 from knowledge_distillation.utils import device, to_indexes, pad
 
 
-class _LSTMBase(object):
+class _LSTMBase(Trainer):
 
     vocab_name = None
     weights_name = None
-
-    def __init__(self, settings, logger):
-        self.settings = settings
-        self.logger = logger
-        self.tb_writer = SummaryWriter(log_dir=settings['log_dir'], filename_suffix=settings['tb_suffix'])
 
     def model(self, text_field):
         raise NotImplementedError()
@@ -94,14 +89,8 @@ class _LSTMBase(object):
 
         for epoch in range(num_train_epochs):
             train_loss = self.epoch_train_func(model, train_dataset)
-            eval_loss, acc = self.epoch_evaluate_func(model, val_dataset)
-
-            self.logger.info('######## epoch={} ########'.format(epoch))
-            self.logger.info("train_loss={:.4f}, val_loss={:.4f}, acc={:.4f}".format(train_loss, eval_loss, acc))
-
-            self.tb_writer.add_scalars('{}/loss'.format(self.settings['tb_suffix']),
-                                       {'train': train_loss, 'test': eval_loss}, epoch)
-            self.tb_writer.add_scalar('{}/val_acc'.format(self.settings['tb_suffix']), acc, epoch)
+            eval_loss, acc = self.epoch_evaluate_func(model, val_dataset, epoch)
+            self.log_epoch(train_loss, eval_loss, acc, epoch)
 
             if eval_loss < best_eval_loss:
                 best_eval_loss = eval_loss
@@ -128,7 +117,7 @@ class _LSTMBase(object):
         scheduler.step()
         return train_loss / num_examples
 
-    def epoch_evaluate_func(self, model, eval_dataset):
+    def epoch_evaluate_func(self, model, eval_dataset, epoch):
         eval_sampler = SequentialSampler(eval_dataset)
         data_loader = DataLoader(eval_dataset, sampler=eval_sampler,
                                  batch_size=self.settings['eval_batch_size'],
@@ -138,6 +127,8 @@ class _LSTMBase(object):
         acc = 0.0
         num_examples = 0
         model.eval()
+        predictions = None
+        labels = None
         for i, (text, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Val')):
             text, bert_prob, real_label = self.to_device(text, bert_prob, real_label)
             output = model(text.t()).squeeze(1)
@@ -145,10 +136,14 @@ class _LSTMBase(object):
             loss = self.loss(output, bert_prob, real_label)
             eval_loss += loss.item()
 
-            pred_label = torch.argmax(output, dim=1)
+            probs = torch.softmax(output, dim=1)
+            pred_label = torch.argmax(probs, dim=1)
             acc += torch.sum(pred_label == real_label).cpu().numpy()
             num_examples += len(real_label)
 
+            predictions, labels = self.stack(predictions, labels, probs, real_label)
+
+        self.log_pr(labels, predictions, epoch)
         return eval_loss / num_examples, acc / num_examples
 
     def loss(self, output, bert_prob, real_label):

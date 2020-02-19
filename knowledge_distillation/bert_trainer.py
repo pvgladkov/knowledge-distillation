@@ -8,6 +8,7 @@ from tqdm import tqdm
 from transformers import AdamW
 from transformers import BertForSequenceClassification
 
+from knowledge_distillation.trainer import Trainer
 from knowledge_distillation.utils import device
 
 
@@ -20,11 +21,7 @@ def batch_to_inputs(batch):
     return inputs
 
 
-class BertTrainer(object):
-
-    def __init__(self, settings, logger):
-        self.settings = settings
-        self.logger = logger
+class BertTrainer(Trainer):
 
     def train(self, train_dataset, tokenizer, output_dir):
         model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
@@ -55,9 +52,10 @@ class BertTrainer(object):
         for epoch in range(int(train_settings['num_train_epochs'])):
 
             train_loss = self.epoch_train_func(model, train_dataset, optimizer, scheduler)
-            val_loss, val_acc = self.evaluate(model, val_dataset)
-            self.logger.info('######## epoch={} ########'.format(epoch))
-            self.logger.info("train_loss={:.4f}, val_loss={:.4f}, acc={:.4f}".format(train_loss, val_loss, val_acc))
+            val_loss, val_acc = self.evaluate(model, val_dataset, epoch)
+
+            self.log_epoch(train_loss, val_loss, val_acc, epoch)
+
             model.save_pretrained(output_dir)
 
     def epoch_train_func(self, model, dataset, optimizer, scheduler,):
@@ -81,7 +79,7 @@ class BertTrainer(object):
         scheduler.step()
         return train_loss / len(data)
 
-    def evaluate(self, model, eval_dataset):
+    def evaluate(self, model, eval_dataset, epoch):
         train_settings = self.settings
 
         eval_sampler = SequentialSampler(eval_dataset)
@@ -90,8 +88,10 @@ class BertTrainer(object):
         eval_loss = 0.0
         acc = 0.0
         num_examples = 0
+        model.eval()
+        predictions = None
+        labels = None
         for batch in tqdm(data_loader, desc="Evaluating"):
-            model.eval()
             batch = tuple(t.to(device()) for t in batch)
 
             with torch.no_grad():
@@ -101,9 +101,13 @@ class BertTrainer(object):
 
                 eval_loss += tmp_eval_loss.item()
 
+                probs = torch.softmax(logits, dim=1)
                 pred_label = torch.argmax(logits, dim=1)
                 acc += torch.sum(pred_label == batch[3]).cpu().numpy()
                 num_examples += len(batch[3])
 
+                predictions, labels = self.stack(predictions, labels, probs, batch[3])
+
+        self.log_pr(labels, predictions, epoch)
         return eval_loss / len(data_loader), acc / num_examples
 
