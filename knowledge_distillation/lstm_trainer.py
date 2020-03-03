@@ -103,6 +103,10 @@ class _LSTMBase(Trainer):
         data_loader = DataLoader(dataset, sampler=train_sampler, batch_size=self.settings['train_batch_size'],
                                  drop_last=True)
         model.train()
+
+        p_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        self.logger.info('# of trainable params {}'.format(p_count))
+
         num_examples = 0
         optimizer, scheduler = self.optimizer(model)
         for i, (text, bert_prob, real_label) in enumerate(tqdm(data_loader, desc='Train')):
@@ -168,8 +172,8 @@ class LSTMBaseline(_LSTMBase):
     def model(self, text_field):
         model = SimpleLSTM(
             input_dim=len(text_field.vocab),
-            embedding_dim=64,
-            hidden_dim=32,
+            embedding_dim=16,
+            hidden_dim=8,
             output_dim=2,
             n_layers=1,
             bidirectional=True,
@@ -198,8 +202,8 @@ class LSTMDistilled(_LSTMBase):
     def model(self, text_field):
         model = SimpleLSTM(
             input_dim=len(text_field.vocab),
-            embedding_dim=64,
-            hidden_dim=32,
+            embedding_dim=16,
+            hidden_dim=8,
             output_dim=2,
             n_layers=1,
             bidirectional=True,

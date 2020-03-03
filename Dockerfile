@@ -46,10 +46,9 @@ ENV ASYNC_TEST_TIMEOUT=10 \
 
 RUN echo $PROJECT_ROOT
 COPY ./requirements.txt $PROJECT_ROOT/
+
 RUN pip3 install --upgrade pip
-
 RUN pip3 install --no-cache-dir -r requirements.txt
-
 RUN python3 -c "import nltk; nltk.download('stopwords', quiet=True); nltk.download('wordnet', quiet=True)"
 
 ENV LANG=en_US.UTF-8
